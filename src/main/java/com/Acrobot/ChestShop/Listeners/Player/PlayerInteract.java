@@ -21,9 +21,13 @@ import com.Acrobot.ChestShop.Utils.uBlock;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
 import org.bukkit.block.Sign;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.type.RedstoneWire;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -33,11 +37,14 @@ import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 
 import static com.Acrobot.Breeze.Utils.ImplementationAdapter.getState;
@@ -179,6 +186,41 @@ public class PlayerInteract implements Listener {
 
         TransactionEvent tEvent = new TransactionEvent(pEvent, sign);
         Bukkit.getPluginManager().callEvent(tEvent);
+
+        // Create redstone signal on trapped chests when a transaction occurs
+        if(sign.getBlock().getBlockData() instanceof Directional) {
+            Directional directional = (Directional) sign.getBlock().getBlockData();
+            Block container = sign.getBlock().getRelative(directional.getFacing().getOppositeFace());
+            if(container.getType().equals(Material.TRAPPED_CHEST)) {
+                List<Block> targetBlocks = new ArrayList<>();
+                if(isRedstoneWire(container.getRelative(BlockFace.UP))) targetBlocks.add(container.getRelative(BlockFace.UP));
+                if(isRedstoneWire(container.getRelative(BlockFace.DOWN))) targetBlocks.add(container.getRelative(BlockFace.DOWN));
+                if(isRedstoneWire(container.getRelative(BlockFace.NORTH))) targetBlocks.add(container.getRelative(BlockFace.NORTH));
+                if(isRedstoneWire(container.getRelative(BlockFace.SOUTH))) targetBlocks.add(container.getRelative(BlockFace.SOUTH));
+                if(isRedstoneWire(container.getRelative(BlockFace.WEST))) targetBlocks.add(container.getRelative(BlockFace.WEST));
+                if(isRedstoneWire(container.getRelative(BlockFace.EAST))) targetBlocks.add(container.getRelative(BlockFace.EAST));
+                if(!targetBlocks.isEmpty()) {
+                    for(Block targetBlock : targetBlocks) {
+                        RedstoneWire blockData = (RedstoneWire) targetBlock.getBlockData();
+                        if(blockData.getPower() == 0) {
+                            blockData.setPower(15);
+                            targetBlock.setBlockData(blockData, true);
+                            new BukkitRunnable() {
+                                @Override
+                                public void run() {
+                                    blockData.setPower(0);
+                                    targetBlock.setBlockData(blockData, true);
+                                }
+                            }.runTaskLater(ChestShop.getPlugin(), 20L);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean isRedstoneWire(Block block) {
+        return block.getBlockData() instanceof RedstoneWire;
     }
 
     private static PreTransactionEvent preparePreTransactionEvent(Sign sign, Player player, Action action) {
